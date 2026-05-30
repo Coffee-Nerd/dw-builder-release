@@ -1,0 +1,53 @@
+# DarkWiz Area Builder — end-user docker-compose.yml
+#
+# This file is the canonical install descriptor for self-hosted use.
+# It is published as the front page of the public release repo:
+#   https://github.com/Coffee-Nerd/dw-builder-release
+#
+# Source code lives in a private repo; only the BUILT IMAGES are
+# public on ghcr.io. End-users never need the source — `docker compose
+# up -d` against this file is the whole install.
+#
+# Update flow for the user:
+#   docker compose pull
+#   docker compose up -d
+#
+# Optional config via .env (see .env.example):
+#   FRONTEND_PORT  — where the web UI is served (default 80)
+#   BACKEND_PORT   — backend API port (default 8000)
+#   IMAGE_TAG      — image version to pin (default "latest")
+
+services:
+  backend:
+    image: ghcr.io/coffee-nerd/dark-wizardry-area-builder-backend:${IMAGE_TAG:-latest}
+    container_name: dw-builder-backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Area JSONs persist here across container restarts.
+      # The backend reads/writes to /app/areas; bind-mount keeps state
+      # on the host so `docker compose down` doesn't lose your work.
+      - dw_areas:/app/areas
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    image: ghcr.io/coffee-nerd/dark-wizardry-area-builder-frontend:${IMAGE_TAG:-latest}
+    container_name: dw-builder-frontend
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  dw_areas:
+    driver: local
